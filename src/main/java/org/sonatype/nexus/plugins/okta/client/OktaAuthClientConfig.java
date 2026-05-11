@@ -41,7 +41,7 @@ public class OktaAuthClientConfig
 	{
 		configuration = new Properties();
 
-		try (InputStream input = Files.newInputStream(Paths.get(".", "etc", CFG_FILE)))
+		try (InputStream input = Files.newInputStream(Paths.get(System.getProperty("karaf.home", "."), "etc", CFG_FILE)))
 		{
 			LOG.info("Loading configuraton from '{}'.", CFG_FILE);
 

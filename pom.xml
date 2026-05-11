@@ -19,7 +19,10 @@
 	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>21</java.version>
         <jakarta.inject.version>2.0.1</jakarta.inject.version>
+        <javax.ws.rs.api.version>2.1.1</javax.ws.rs.api.version>
         <maven.compiler.release>${java.version}</maven.compiler.release>
+        <nimbus.jose.jwt.version>9.37.3</nimbus.jose.jwt.version>
+        <oauth2.oidc.sdk.version>11.23.1</oauth2.oidc.sdk.version>
         <karaf.maven.plugin.version>4.4.11</karaf.maven.plugin.version>
         <maven.bundle.plugin.version>6.0.2</maven.bundle.plugin.version>
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -54,9 +57,20 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.sonatype.nexus</groupId>
+            <artifactId>nexus-rest</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>jakarta.inject</groupId>
             <artifactId>jakarta.inject-api</artifactId>
             <version>${jakarta.inject.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>javax.ws.rs-api</artifactId>
+            <version>${javax.ws.rs.api.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -66,6 +80,24 @@
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>oauth2-oidc-sdk</artifactId>
+            <version>${oauth2.oidc.sdk.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.nimbusds</groupId>
+                    <artifactId>nimbus-jose-jwt</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>${nimbus.jose.jwt.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -106,7 +138,11 @@
                 <configuration>
                     <instructions>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
-                        <Import-Package>*</Import-Package>
+                        <Import-Package>
+                            com.nimbusds.jose*;version="[9.37,11)",
+                            com.nimbusds.jwt*;version="[9.37,11)",
+                            *
+                        </Import-Package>
                         <Embed-Dependency>
                             httpclient;scope=compile
                         </Embed-Dependency>

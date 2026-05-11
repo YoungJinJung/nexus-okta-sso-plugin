@@ -30,7 +30,7 @@ Exit criteria:
 - Unit tests cover invalid issuer, invalid audience, expired token, nonce mismatch, and missing groups.
 - Token/code values are redacted from logs.
 
-Status: authorization request URL generation is implemented. Discovery, token exchange, and ID token validation remain.
+Status: discovery, authorization request URL generation, token exchange, ID token validation, and claims extraction are implemented. More negative-path ID token tests still need to be added.
 
 ## Phase 3: Nexus Web Integration
 
@@ -46,6 +46,8 @@ Exit criteria:
 - Login redirects to Okta.
 - Callback validates and establishes a Nexus session.
 
+Status: direct login and callback resources are implemented, with callback authentication handed to the existing realm through an OIDC Shiro token. Runtime smoke validation against Nexus 3.92.0 remains.
+
 ## Phase 4: OIDC RBAC
 
 - Map OIDC group claims to Nexus role IDs.
@@ -59,6 +61,8 @@ Exit criteria:
 - User without mapped role is denied.
 - Local Nexus roles and OIDC mapped roles have documented precedence.
 
+Status: OIDC group claim mapping is implemented. The Classic Authn API path remains available for compatibility.
+
 ## Phase 5: Operational Hardening
 
 - Add runtime documentation for Okta app setup.
@@ -71,6 +75,8 @@ Exit criteria:
 - OIDC setup can be repeated from docs.
 - No client secret or token is baked into the Docker image.
 - Smoke container exposes `Okta Auth Realm` and the OIDC endpoints.
+
+Status: runtime setup documentation and environment-driven Docker configuration are implemented. Smoke validation confirms the direct login endpoint redirects to Okta authorize when OIDC environment variables are supplied.
 
 ## Implementation Notes
 

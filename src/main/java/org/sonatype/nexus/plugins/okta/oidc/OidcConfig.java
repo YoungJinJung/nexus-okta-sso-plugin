@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
@@ -42,6 +43,7 @@ public class OidcConfig
 
 	private final Properties configuration;
 
+	@Inject
 	public OidcConfig()
 	{
 		this(loadConfiguration());
@@ -171,7 +173,7 @@ public class OidcConfig
 	private static Properties loadConfiguration()
 	{
 		final Properties configuration = new Properties();
-		try (InputStream input = Files.newInputStream(Paths.get(".", "etc", CFG_FILE)))
+		try (InputStream input = Files.newInputStream(Paths.get(System.getProperty("karaf.home", "."), "etc", CFG_FILE)))
 		{
 			LOG.info("Loading OIDC configuration from '{}'.", CFG_FILE);
 			configuration.load(input);

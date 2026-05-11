@@ -109,8 +109,22 @@ oidc.groups.claim=groups
 oidc.group.role.mapping=Okta Admins=nx-admin,Developers=nx-developer
 ```
 
+The Docker image writes `${karaf.home}/etc/nexus-okta-auth.properties` at container start from environment variables. In the Nexus 3.92 image this resolves to `/opt/sonatype/nexus/etc/nexus-okta-auth.properties`. Provide `OIDC_CLIENT_SECRET` at runtime through your container platform secret mechanism; do not bake it into an image.
+
+Runtime environment variables:
+
+- `OIDC_ENABLED`
+- `OIDC_ISSUER`
+- `OIDC_CLIENT_ID`
+- `OIDC_CLIENT_SECRET`
+- `OIDC_REDIRECT_URI`
+- `OIDC_SCOPES`
+- `OIDC_USERNAME_CLAIM`
+- `OIDC_GROUPS_CLAIM`
+- `OIDC_GROUP_ROLE_MAPPING`
+
 ## Open Questions
 
-- The exact Nexus 3.92.0-supported way to establish a web subject from a custom OIDC callback must be validated against runtime internals.
-- The login UX needs a reliable entry point. Options include a direct `/okta/oidc/login` URL first, then UI integration later.
+- Runtime validation must confirm that the custom OIDC callback establishes the expected Nexus web session in Nexus 3.92.0.
+- The login UX currently starts from a direct `/okta/oidc/login` URL. Polished UI integration can be added later.
 - Single logout can be added after login works; it should not block the first OIDC milestone.

@@ -30,6 +30,8 @@ import org.sonatype.nexus.plugins.okta.client.OktaAuthClient;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClientException;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponse;
+import org.sonatype.nexus.plugins.okta.oidc.OidcAuthenticatedIdentity;
+import org.sonatype.nexus.plugins.okta.oidc.OidcAuthenticationToken;
 import org.sonatype.nexus.security.role.RoleIdentifier;
 import org.sonatype.nexus.security.user.UserManager;
 import org.sonatype.nexus.security.user.UserNotFoundException;
@@ -57,8 +59,22 @@ public class OktaAuthRealm extends AuthorizingRealm
 	}
 
 	@Override
+	public boolean supports(final AuthenticationToken token)
+	{
+		return token instanceof UsernamePasswordToken || token instanceof OidcAuthenticationToken;
+	}
+
+	@Override
 	protected AuthenticationInfo doGetAuthenticationInfo(final AuthenticationToken token) throws AuthenticationException
 	{
+		if (token instanceof OidcAuthenticationToken)
+		{
+			final OidcAuthenticatedIdentity identity = ((OidcAuthenticationToken) token).getIdentity();
+			oktaMappedRolesByUser.put(identity.getUsername(), new HashSet<>(identity.getRoles()));
+			LOG.info("Authenticated OIDC user {}", identity.getUsername());
+			return new SimpleAuthenticationInfo(identity.getUsername(), token.getCredentials(), getName());
+		}
+
 		if (!(token instanceof UsernamePasswordToken))
 		{
 			throw new UnsupportedTokenException(String.format("Token of type '%s' is not supported. '%s' is required.",
