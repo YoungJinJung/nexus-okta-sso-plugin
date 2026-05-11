@@ -1,12 +1,14 @@
 package org.sonatype.nexus.plugins.okta;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-import javax.inject.Inject;
-import javax.inject.Named;
-import javax.inject.Singleton;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.inject.Singleton;
 
 import org.apache.shiro.authc.AccountException;
 import org.apache.shiro.authc.AuthenticationException;
@@ -20,26 +22,30 @@ import org.apache.shiro.authz.AuthorizationInfo;
 import org.apache.shiro.authz.SimpleAuthorizationInfo;
 import org.apache.shiro.realm.AuthorizingRealm;
 import org.apache.shiro.subject.PrincipalCollection;
-import org.eclipse.sisu.Description;
+import org.sonatype.nexus.common.Description;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClient;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClientException;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity;
+import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponse;
 import org.sonatype.nexus.security.role.RoleIdentifier;
 import org.sonatype.nexus.security.user.UserManager;
 import org.sonatype.nexus.security.user.UserNotFoundException;
 
 @Singleton
-@Named
+@Named(OktaAuthRealm.NAME)
+@Qualifier(OktaAuthRealm.NAME)
 @Description("Okta Auth Realm")
 public class OktaAuthRealm extends AuthorizingRealm
 {
 	private static final Logger LOG = LoggerFactory.getLogger(OktaAuthRealm.class);
-	public static final String NAME = OktaAuthRealm.class.getName();
+	public static final String NAME = "org.sonatype.nexus.plugins.okta.OktaAuthRealm";
 
 	private final OktaAuthClient client;
 	private final UserManager userManager;
+	private final Map<String, Set<String>> oktaMappedRolesByUser = new ConcurrentHashMap<>();
 
 	@Inject
 	public OktaAuthRealm(final OktaAuthClient client, final UserManager userManager)
@@ -66,7 +72,8 @@ public class OktaAuthRealm extends AuthorizingRealm
 
 		try
 		{
-			client.authn(t.getUsername(), password);
+			final OktaAuthResponse response = client.authn(t.getUsername(), password);
+			oktaMappedRolesByUser.put(t.getUsername(), new HashSet<>(client.getMappedRoles(response)));
 			return new SimpleAuthenticationInfo(t.getUsername(), token.getCredentials(), getName());
 
 		} catch (final OktaAuthClientException ex)
@@ -110,10 +117,16 @@ public class OktaAuthRealm extends AuthorizingRealm
 	        }
 		}
 		catch (final UserNotFoundException e) {
-			throw new AuthorizationException("User for principals: " + principals.getPrimaryPrincipal()
-	            + " could not be found.", e);
+			LOG.info("No local Nexus user found for principal '{}'. Falling back to mapped Okta roles.",
+					principals.getPrimaryPrincipal());
 		}
 
+		roles.addAll(oktaMappedRolesByUser.getOrDefault((String) principal, Set.of()));
+		if (roles.isEmpty())
+		{
+			throw new AuthorizationException("No Nexus or mapped Okta roles found for principals: "
+					+ principals.getPrimaryPrincipal());
+		}
 		return new SimpleAuthorizationInfo(roles);
 	}
 

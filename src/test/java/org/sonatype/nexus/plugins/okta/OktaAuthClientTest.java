@@ -2,14 +2,16 @@ package org.sonatype.nexus.plugins.okta;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.assertThat;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -17,7 +19,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import org.sonatype.nexus.plugins.okta.client.ApiHttpClient;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClient;
@@ -26,6 +28,8 @@ import org.sonatype.nexus.plugins.okta.client.OktaAuthClientException;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthRequest;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponse;
+import org.sonatype.nexus.plugins.okta.client.dto.OktaGroup;
+import org.sonatype.nexus.plugins.okta.client.dto.OktaGroupProfile;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaErrorResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -48,6 +52,8 @@ public class OktaAuthClientTest
 		when(config.getOktaApi()).thenReturn("/api/v1");
 		when(config.getMfaPollDelay()).thenReturn(10);
 		when(config.getMfaPollMaxRetries()).thenReturn(5);
+		when(config.getOktaApiToken()).thenReturn("api-token");
+		when(config.getOktaGroupRoleMapping()).thenReturn(Map.of("Nexus Admins", "nx-admin", "Developers", "nx-developer"));
 		
 		apiClient = Mockito.mock(ApiHttpClient.class);
 		
@@ -102,6 +108,24 @@ public class OktaAuthClientTest
 		OktaAuthResponse actualResponse = client.authn("testUser", "testPassword");
 		assertThat(actualResponse.getSessionToken(), equalTo("123456789"));
 	}
+
+	@Test
+	public void shouldMapOktaGroupsToNexusRoles() throws IOException
+	{
+		OktaAuthResponse response = null;
+		try (InputStream inputStream = this.getClass().getResourceAsStream("/stubs/okta-auth-response-success.json")) {
+			response = mapper.readValue(readFromInputStream(inputStream), OktaAuthResponse.class);
+		}
+
+		final OktaGroup adminGroup = group("Nexus Admins");
+		final OktaGroup ignoredGroup = group("Unmapped Group");
+		when(apiClient.sendGetRequest("https://localhost/api/v1/users/987654321/groups", "api-token", OktaGroup[].class))
+				.thenReturn(new OktaGroup[] { adminGroup, ignoredGroup });
+
+		final List<String> roles = client.getMappedRoles(response);
+
+		assertThat(roles, equalTo(List.of("nx-admin")));
+	}
 	
 	private String readFromInputStream(InputStream inputStream) throws IOException
 	{
@@ -115,5 +139,15 @@ public class OktaAuthClientTest
 			}
 		}
 		return resultStringBuilder.toString();
+	}
+
+	private OktaGroup group(final String name)
+	{
+		final OktaGroupProfile profile = new OktaGroupProfile();
+		profile.setName(name);
+
+		final OktaGroup group = new OktaGroup();
+		group.setProfile(profile);
+		return group;
 	}
 }

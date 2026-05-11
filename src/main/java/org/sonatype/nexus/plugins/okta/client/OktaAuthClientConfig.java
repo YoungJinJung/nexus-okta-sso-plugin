@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 
-import javax.inject.Named;
-import javax.inject.Singleton;
+import jakarta.inject.Named;
+import jakarta.inject.Singleton;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +27,8 @@ public class OktaAuthClientConfig
 
 	private static String OKTA_API_KEY = "okta.api";
 	private static String OKTA_API_DEFAULT = "/api/v1";
+	private static String OKTA_API_TOKEN_KEY = "okta.api.token";
+	private static String OKTA_GROUP_ROLE_MAPPING_KEY = "okta.group.role.mapping";
 
 	private static String MFA_POLL_DELAY_KEY = "mfa.poll.delay";
 	private static int MFA_POLL_DELAY_DEFAULT = 3000;
@@ -55,6 +60,33 @@ public class OktaAuthClientConfig
 	public String getOktaApi()
 	{
 		return configuration.getProperty(OKTA_API_KEY, OKTA_API_DEFAULT);
+	}
+
+	public String getOktaApiToken()
+	{
+		return configuration.getProperty(OKTA_API_TOKEN_KEY);
+	}
+
+	public Map<String, String> getOktaGroupRoleMapping()
+	{
+		final String mapping = configuration.getProperty(OKTA_GROUP_ROLE_MAPPING_KEY);
+		if (mapping == null || mapping.isBlank())
+		{
+			return Collections.emptyMap();
+		}
+
+		final Map<String, String> result = new LinkedHashMap<>();
+		for (final String entry : mapping.split(","))
+		{
+			final String[] parts = entry.split("=", 2);
+			if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank())
+			{
+				LOG.warn("Ignoring invalid Okta group role mapping entry '{}'. Expected 'okta-group=nexus-role'.", entry);
+				continue;
+			}
+			result.put(parts[0].trim(), parts[1].trim());
+		}
+		return result;
 	}
 
 	public int getMfaPollDelay()

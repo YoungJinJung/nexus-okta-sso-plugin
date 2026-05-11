@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.sonatype.nexus.plugins</groupId>
         <artifactId>nexus-plugins</artifactId>
-        <version>3.29.2-02</version>
+        <version>3.88.0-08</version>
     </parent>
 
     <artifactId>nexus-okta-auth-plugin</artifactId>
@@ -17,9 +17,15 @@
     
     <properties>
 	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-	<java.version>1.8</java.version>
-	<maven.compiler.source>1.8</maven.compiler.source>
-	<maven.compiler.target>1.8</maven.compiler.target>
+        <java.version>21</java.version>
+        <jakarta.inject.version>2.0.1</jakarta.inject.version>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
+        <karaf.maven.plugin.version>4.4.11</karaf.maven.plugin.version>
+        <maven.bundle.plugin.version>6.0.2</maven.bundle.plugin.version>
+        <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
+        <maven.failsafe.plugin.version>3.2.5</maven.failsafe.plugin.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <sisu.inject.version>0.3.5</sisu.inject.version>
         <revision>0-SNAPSHOT</revision>
     </properties>
     
@@ -48,12 +54,24 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <version>${jakarta.inject.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.sisu</groupId>
+            <artifactId>org.eclipse.sisu.inject</artifactId>
+            <version>${sisu.inject.version}</version>
             <scope>provided</scope>
         </dependency>
         
@@ -70,18 +88,20 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler.plugin.version}</version>
                 <configuration>
-		    <source>${maven.compiler.source}</source>
-		    <target>${maven.compiler.target}</target>
+		    <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.karaf.tooling</groupId>
                 <artifactId>karaf-maven-plugin</artifactId>
+                <version>${karaf.maven.plugin.version}</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.felix</groupId>
                 <artifactId>maven-bundle-plugin</artifactId>
+                <version>${maven.bundle.plugin.version}</version>
                 <extensions>true</extensions>
                 <configuration>
                     <instructions>
@@ -101,6 +121,7 @@
             </plugin>
             <plugin>
 		      <artifactId>maven-surefire-plugin</artifactId>
+		      <version>${maven.surefire.plugin.version}</version>
 		      <configuration>
 		        <excludedGroups>org.sonatype.nexus.plugins.okta.test.IntegrationTest</excludedGroups>
 		      </configuration>
@@ -115,7 +136,7 @@
 		        <plugins>
 		            <plugin>
 		                <artifactId>maven-failsafe-plugin</artifactId>
-		                <version>2.22.0</version>
+		                <version>${maven.failsafe.plugin.version}</version>
 		                <configuration>
 		                    <includes>
 		                        <include>**/*</include>

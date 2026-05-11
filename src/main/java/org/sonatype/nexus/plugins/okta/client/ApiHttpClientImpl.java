@@ -8,6 +8,7 @@ import java.io.IOException;
 import org.apache.http.ParseException;
 import org.apache.http.StatusLine;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -87,6 +88,56 @@ public class ApiHttpClientImpl implements ApiHttpClient
 
 				final T responseObj = mapper.readValue(responseStr, responseClazz);
 				return responseObj;
+			}
+		}
+		catch (final IOException e)
+		{
+			throw new RuntimeException(e.getMessage(), e);
+		}
+	}
+
+	@Override
+	public <T> T sendGetRequest(final String uri, final String bearerToken, final Class<T> responseClazz)
+	{
+		try
+		{
+			if (LOG.isDebugEnabled())
+			{
+				LOG.debug("Sending GET request to {}", uri);
+			}
+			else
+			{
+				LOG.info("Sending GET request to {}", uri);
+			}
+
+			final HttpGet request = new HttpGet(uri);
+			request.setHeader("Accept", "application/json");
+			if (bearerToken != null && !bearerToken.isBlank())
+			{
+				request.setHeader("Authorization", "SSWS " + bearerToken);
+			}
+
+			try (CloseableHttpResponse response = client.execute(request))
+			{
+				final int statusCode = response.getStatusLine().getStatusCode();
+
+				if (statusCode > 399)
+				{
+					final OktaAuthClientExceptionSeverity severity = statusCode > 499 ? ERROR : INFO;
+					throw new OktaAuthClientException(severity, readResponseBody(uri, response, OktaErrorResponse.class));
+				}
+
+				final String responseStr = EntityUtils.toString(response.getEntity());
+				if (LOG.isDebugEnabled())
+				{
+					LOG.debug("Retrieved {} response from {} with response body: {}", statusCode, uri, responseStr);
+				}
+				else
+				{
+					LOG.info("Retrieved {} response from {}", statusCode, uri);
+				}
+
+				return mapper.readValue(responseStr, responseClazz);
 			}
 		}
 		catch (final IOException e)

@@ -10,7 +10,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import org.sonatype.nexus.plugins.okta.client.ApiHttpClientImpl;
 import org.sonatype.nexus.plugins.okta.client.OktaAuthClient;

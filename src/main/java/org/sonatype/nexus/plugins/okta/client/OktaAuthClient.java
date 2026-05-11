@@ -3,11 +3,15 @@ package org.sonatype.nexus.plugins.okta.client;
 import static org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity.INFO;
 import static org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity.WARN;
 
-import javax.inject.Inject;
-import javax.inject.Named;
-import javax.inject.Singleton;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
-import org.apache.commons.collections.CollectionUtils;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.inject.Singleton;
+
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +19,7 @@ import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthRequest;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthRequestVerifyFactor;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponse;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponseEmbeddedFactor;
+import org.sonatype.nexus.plugins.okta.client.dto.OktaGroup;
 
 @Singleton
 @Named("OktaAuthClient")
@@ -74,9 +79,51 @@ public class OktaAuthClient
 		throw new OktaAuthClientException(INFO, "Authentication was not successful");
 	}
 
+	public List<String> getMappedRoles(final OktaAuthResponse authResponse)
+	{
+		if (authResponse == null || authResponse.getEmbedded() == null || authResponse.getEmbedded().getUser() == null)
+		{
+			return Collections.emptyList();
+		}
+
+		final String userId = authResponse.getEmbedded().getUser().getId();
+		if (StringUtils.isBlank(userId) || StringUtils.isBlank(config.getOktaApiToken()))
+		{
+			return Collections.emptyList();
+		}
+
+		final Map<String, String> groupRoleMapping = config.getOktaGroupRoleMapping();
+		if (groupRoleMapping.isEmpty())
+		{
+			return Collections.emptyList();
+		}
+
+		final String uri = config.getOktaOrgUrl() + config.getOktaApi() + "/users/" + userId + "/groups";
+		final OktaGroup[] groups = client.sendGetRequest(uri, config.getOktaApiToken(), OktaGroup[].class);
+		if (groups == null || groups.length == 0)
+		{
+			return Collections.emptyList();
+		}
+
+		final List<String> roles = new ArrayList<>();
+		for (final OktaGroup group : groups)
+		{
+			if (group != null && group.getProfile() != null)
+			{
+				final String role = groupRoleMapping.get(group.getProfile().getName());
+				if (StringUtils.isNotBlank(role))
+				{
+					roles.add(role);
+				}
+			}
+		}
+		return roles;
+	}
+
 	protected OktaAuthResponse handleMfaChallenge(final OktaAuthResponse response)
 	{
-		if (response == null || response.getEmbedded() == null || CollectionUtils.isEmpty(response.getEmbedded().getFactors()))
+		if (response == null || response.getEmbedded() == null || response.getEmbedded().getFactors() == null
+				|| response.getEmbedded().getFactors().isEmpty())
 		{
 			throw new OktaAuthClientException(INFO,
 					"Status indicates that MFA is required, but no second factor config was found in the response. Did you set up MFA correctly?");
@@ -99,7 +146,12 @@ public class OktaAuthClient
 							+ client.asStrOrEmpty(response.getEmbedded().getFactors()));
 		}
 
-		return verifyMfa(response.getStateToken(), selectedFactor);
+		final OktaAuthResponse verifiedResponse = verifyMfa(response.getStateToken(), selectedFactor);
+		if (verifiedResponse.getEmbedded() == null || verifiedResponse.getEmbedded().getUser() == null)
+		{
+			verifiedResponse.setEmbedded(response.getEmbedded());
+		}
+		return verifiedResponse;
 	}
 
 	protected OktaAuthResponse verifyMfa(final String stateToken, final OktaAuthResponseEmbeddedFactor factor)

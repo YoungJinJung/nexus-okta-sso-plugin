@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 public class OktaAuthResponseEmbedded
 {
 	private List<OktaAuthResponseEmbeddedFactor> factors;
+	private OktaUser user;
 
 	public List<OktaAuthResponseEmbeddedFactor> getFactors()
 	{
@@ -17,6 +18,16 @@ public class OktaAuthResponseEmbedded
 	public void setFactors(List<OktaAuthResponseEmbeddedFactor> factors)
 	{
 		this.factors = factors;
+	}
+
+	public OktaUser getUser()
+	{
+		return user;
+	}
+
+	public void setUser(OktaUser user)
+	{
+		this.user = user;
 	}
 
 }
