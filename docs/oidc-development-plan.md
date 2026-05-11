@@ -78,6 +78,21 @@ Exit criteria:
 
 Status: runtime setup documentation and environment-driven Docker configuration are implemented. Smoke validation confirms the direct login endpoint redirects to Okta authorize when OIDC environment variables are supplied.
 
+## Phase 6: Logout and UI Entry Points
+
+- Add OIDC-aware logout endpoint.
+- Redirect to provider end-session endpoint when possible.
+- Keep direct login/logout URLs documented.
+- Evaluate Nexus UI button replacement separately because Nexus 3.92 UI assets are packaged inside runtime jars.
+
+Exit criteria:
+
+- Logout clears the local Nexus subject.
+- Logout redirects to Okta end-session when an ID token and post-logout redirect URI are available.
+- Runtime docs include login and logout URLs.
+
+Status: logout endpoint is implemented and documented. UI button replacement remains a separate packaging task.
+
 ## Implementation Notes
 
 - Prefer `com.nimbusds:oauth2-oidc-sdk` and `com.nimbusds:nimbus-jose-jwt` because Nexus 3.92.0 already ships Nimbus libraries.

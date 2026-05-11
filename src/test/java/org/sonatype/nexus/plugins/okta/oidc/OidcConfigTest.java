@@ -24,6 +24,7 @@ public class OidcConfigTest
 		assertThat(config.getIssuer(), equalTo(URI.create("https://example.okta.com/oauth2/default")));
 		assertThat(config.getClientId(), equalTo("client-id"));
 		assertThat(config.getRedirectUri(), equalTo(URI.create("https://nexus.example.com/okta/oidc/callback")));
+		assertThat(config.getPostLogoutRedirectUri(), equalTo(URI.create("https://nexus.example.com/")));
 		assertThat(config.getScopes(), equalTo(List.of("openid", "profile", "email", "groups")));
 		assertThat(config.getUsernameClaim(), equalTo("preferred_username"));
 		assertThat(config.getGroupsClaim(), equalTo("groups"));
@@ -64,6 +65,7 @@ public class OidcConfigTest
 		properties.setProperty("oidc.client.id", "client-id");
 		properties.setProperty("oidc.client.secret", "client-secret");
 		properties.setProperty("oidc.redirect.uri", "https://nexus.example.com/okta/oidc/callback");
+		properties.setProperty("oidc.post.logout.redirect.uri", "https://nexus.example.com/");
 		properties.setProperty("oidc.scopes", "openid, profile, email, groups");
 		properties.setProperty("oidc.group.role.mapping", "Okta Admins=nx-admin, Developers=nx-developer");
 		return properties;

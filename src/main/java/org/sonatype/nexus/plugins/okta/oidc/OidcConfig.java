@@ -32,6 +32,7 @@ public class OidcConfig
 	private static final String CLIENT_ID_KEY = "oidc.client.id";
 	private static final String CLIENT_SECRET_KEY = "oidc.client.secret";
 	private static final String REDIRECT_URI_KEY = "oidc.redirect.uri";
+	private static final String POST_LOGOUT_REDIRECT_URI_KEY = "oidc.post.logout.redirect.uri";
 	private static final String SCOPES_KEY = "oidc.scopes";
 	private static final String USERNAME_CLAIM_KEY = "oidc.username.claim";
 	private static final String GROUPS_CLAIM_KEY = "oidc.groups.claim";
@@ -77,6 +78,21 @@ public class OidcConfig
 	public URI getRedirectUri()
 	{
 		return uri(REDIRECT_URI_KEY);
+	}
+
+	public URI getPostLogoutRedirectUri()
+	{
+		final String value = configuration.getProperty(POST_LOGOUT_REDIRECT_URI_KEY);
+		if (value == null || value.isBlank())
+		{
+			return null;
+		}
+		final URI uri = URI.create(value.trim());
+		if (!uri.isAbsolute())
+		{
+			throw new IllegalArgumentException(POST_LOGOUT_REDIRECT_URI_KEY + " must be an absolute URI");
+		}
+		return uri;
 	}
 
 	public List<String> getScopes()

@@ -118,6 +118,7 @@ Runtime environment variables:
 - `OIDC_CLIENT_ID`
 - `OIDC_CLIENT_SECRET`
 - `OIDC_REDIRECT_URI`
+- `OIDC_POST_LOGOUT_REDIRECT_URI`
 - `OIDC_SCOPES`
 - `OIDC_USERNAME_CLAIM`
 - `OIDC_GROUPS_CLAIM`
@@ -127,4 +128,4 @@ Runtime environment variables:
 
 - Runtime validation must confirm that the custom OIDC callback establishes the expected Nexus web session in Nexus 3.92.0.
 - The login UX currently starts from a direct `/okta/oidc/login` URL. Polished UI integration can be added later.
-- Single logout can be added after login works; it should not block the first OIDC milestone.
+- OIDC-aware logout is available at `/service/rest/okta/oidc/logout`. Nexus UI logout button replacement is still separate from the direct endpoint.

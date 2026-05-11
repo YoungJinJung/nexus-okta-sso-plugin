@@ -1,6 +1,8 @@
 package org.sonatype.nexus.plugins.okta.oidc;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 import jakarta.inject.Inject;
@@ -53,11 +55,41 @@ public class OidcAuthenticationService
 		return authorizationUrlBuilder.build(loginState);
 	}
 
-	public OidcAuthenticatedIdentity completeLogin(final String code, final String state)
+	public OidcLoginResult completeLogin(final String code, final String state)
 	{
 		final OidcLoginState loginState = stateStore.consume(state);
 		final OIDCProviderMetadata metadata = metadataResolver.resolve();
 		final OIDCTokens tokens = tokenClient.exchangeAuthorizationCode(metadata, code);
-		return idTokenValidator.validate(metadata, tokens, loginState);
+		return new OidcLoginResult(idTokenValidator.validate(metadata, tokens, loginState), tokens.getIDTokenString());
+	}
+
+	public URI endSession(final String idToken)
+	{
+		if (!config.isEnabled() || idToken == null || idToken.isBlank())
+		{
+			return null;
+		}
+
+		final URI postLogoutRedirectUri = config.getPostLogoutRedirectUri();
+		if (postLogoutRedirectUri == null)
+		{
+			return null;
+		}
+
+		final URI endSessionEndpoint = metadataResolver.resolve().getEndSessionEndpointURI();
+		if (endSessionEndpoint == null)
+		{
+			return null;
+		}
+
+		final String query = "id_token_hint=" + encode(idToken)
+				+ "&post_logout_redirect_uri=" + encode(postLogoutRedirectUri.toString())
+				+ "&state=" + encode(stateGenerator.generate().getState());
+		return URI.create(endSessionEndpoint + "?" + query);
+	}
+
+	private String encode(final String value)
+	{
+		return URLEncoder.encode(value, StandardCharsets.UTF_8);
 	}
 }

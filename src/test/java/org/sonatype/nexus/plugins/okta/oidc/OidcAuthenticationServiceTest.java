@@ -10,6 +10,8 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.Set;
 
+import com.nimbusds.oauth2.sdk.id.Issuer;
+import com.nimbusds.openid.connect.sdk.SubjectType;
 import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import com.nimbusds.openid.connect.sdk.token.OIDCTokens;
 import org.junit.Test;
@@ -47,6 +49,7 @@ public class OidcAuthenticationServiceTest
 		when(metadataResolver.resolve()).thenReturn(metadata);
 		when(tokenClient.exchangeAuthorizationCode(metadata, "code")).thenReturn(tokens);
 		when(idTokenValidator.validate(metadata, tokens, loginState)).thenReturn(identity);
+		when(tokens.getIDTokenString()).thenReturn("id-token");
 
 		final OidcAuthenticationService service = new OidcAuthenticationService(
 				mock(OidcLoginStateGenerator.class),
@@ -57,7 +60,42 @@ public class OidcAuthenticationServiceTest
 				tokenClient,
 				idTokenValidator);
 
-		assertThat(service.completeLogin("code", "state"), equalTo(identity));
+		final OidcLoginResult result = service.completeLogin("code", "state");
+
+		assertThat(result.getIdentity(), equalTo(identity));
+		assertThat(result.getIdToken(), equalTo("id-token"));
+	}
+
+	@Test
+	public void shouldBuildEndSessionUrl()
+	{
+		final OidcLoginStateGenerator stateGenerator = mock(OidcLoginStateGenerator.class);
+		final OidcProviderMetadataResolver metadataResolver = mock(OidcProviderMetadataResolver.class);
+		final OIDCProviderMetadata metadata = new OIDCProviderMetadata(
+				new Issuer("https://example.okta.com/oauth2/default"),
+				java.util.List.of(SubjectType.PUBLIC),
+				URI.create("https://example.okta.com/oauth2/default/v1/keys"));
+		metadata.setEndSessionEndpointURI(URI.create("https://example.okta.com/oauth2/default/v1/logout"));
+		when(metadataResolver.resolve()).thenReturn(metadata);
+		when(stateGenerator.generate()).thenReturn(new OidcLoginState("logout-state", "nonce", Instant.now()));
+
+		final OidcAuthenticationService service = new OidcAuthenticationService(
+				stateGenerator,
+				enabledConfig(),
+				mock(OidcLoginStateStore.class),
+				mock(OidcAuthorizationUrlBuilder.class),
+				metadataResolver,
+				mock(OidcTokenClient.class),
+				mock(OidcIdTokenValidator.class));
+
+		final URI uri = service.endSession("id-token");
+
+		assertThat(uri.getScheme(), equalTo("https"));
+		assertThat(uri.getHost(), equalTo("example.okta.com"));
+		assertThat(uri.getPath(), equalTo("/oauth2/default/v1/logout"));
+		assertThat(uri.getRawQuery().contains("id_token_hint=id-token"), equalTo(true));
+		assertThat(uri.getRawQuery().contains("post_logout_redirect_uri=https%3A%2F%2Fnexus.example.com%2F"), equalTo(true));
+		assertThat(uri.getRawQuery().contains("state=logout-state"), equalTo(true));
 	}
 
 	private OidcAuthenticationService service(
@@ -80,6 +118,7 @@ public class OidcAuthenticationServiceTest
 	{
 		final java.util.Properties properties = new java.util.Properties();
 		properties.setProperty("oidc.enabled", "true");
+		properties.setProperty("oidc.post.logout.redirect.uri", "https://nexus.example.com/");
 		return new OidcConfig(properties);
 	}
 }

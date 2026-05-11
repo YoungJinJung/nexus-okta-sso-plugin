@@ -26,6 +26,7 @@ docker run \
   -e OIDC_CLIENT_ID=<client-id> \
   -e OIDC_CLIENT_SECRET=<client-secret> \
   -e OIDC_REDIRECT_URI=https://<nexus-host>/service/rest/okta/oidc/callback \
+  -e OIDC_POST_LOGOUT_REDIRECT_URI=https://<nexus-host>/ \
   -e OIDC_GROUP_ROLE_MAPPING='Developers=nx-developer,Okta Admins=nx-admin' \
   nexus-okta-auth-plugin:oidc-dev
 ```
@@ -41,6 +42,16 @@ https://<nexus-host>/service/rest/okta/oidc/login
 ```
 
 The endpoint creates a server-side `state` and `nonce`, then redirects to Okta.
+
+## Logout URL
+
+Start OIDC-aware logout at:
+
+```text
+https://<nexus-host>/service/rest/okta/oidc/logout
+```
+
+The endpoint clears the Nexus subject and, when `OIDC_POST_LOGOUT_REDIRECT_URI` is configured and the provider exposes an end-session endpoint, redirects to Okta logout with `id_token_hint`, `post_logout_redirect_uri`, and `state`.
 
 ## Required Realm
 
@@ -59,5 +70,5 @@ Users without a mapped role are denied.
 ## Current Limitations
 
 - Direct login URL is implemented; Nexus UI login button integration is not.
-- OIDC logout is not implemented.
 - Callback flow is implemented, but it still needs validation against a real Okta tenant.
+- Nexus UI login/logout button replacement is not bundled yet; use the direct login/logout URLs above.
