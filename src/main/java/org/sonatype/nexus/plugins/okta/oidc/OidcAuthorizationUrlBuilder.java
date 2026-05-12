@@ -11,12 +11,12 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
+import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
+
 @Singleton
 @Named
 public class OidcAuthorizationUrlBuilder
 {
-	private static final String AUTHORIZE_PATH = "/v1/authorize";
-
 	private final OidcConfig config;
 
 	@Inject
@@ -25,10 +25,15 @@ public class OidcAuthorizationUrlBuilder
 		this.config = Objects.requireNonNull(config);
 	}
 
-	public URI build(final OidcLoginState loginState)
+	public URI build(final OIDCProviderMetadata metadata, final OidcLoginState loginState)
 	{
+		Objects.requireNonNull(metadata);
 		Objects.requireNonNull(loginState);
 		config.validate();
+		if (metadata.getAuthorizationEndpointURI() == null)
+		{
+			throw new OidcProtocolException("OIDC discovery metadata does not define authorization endpoint");
+		}
 
 		final Map<String, String> params = new LinkedHashMap<>();
 		params.put("client_id", config.getClientId());
@@ -38,7 +43,7 @@ public class OidcAuthorizationUrlBuilder
 		params.put("state", loginState.getState());
 		params.put("nonce", loginState.getNonce());
 
-		return URI.create(trimTrailingSlash(config.getIssuer().toString()) + AUTHORIZE_PATH + "?" + encode(params));
+		return URI.create(metadata.getAuthorizationEndpointURI() + "?" + encode(params));
 	}
 
 	private String encode(final Map<String, String> params)
@@ -62,12 +67,4 @@ public class OidcAuthorizationUrlBuilder
 		return URLEncoder.encode(value, StandardCharsets.UTF_8);
 	}
 
-	private String trimTrailingSlash(final String value)
-	{
-		if (value.endsWith("/"))
-		{
-			return value.substring(0, value.length() - 1);
-		}
-		return value;
-	}
 }

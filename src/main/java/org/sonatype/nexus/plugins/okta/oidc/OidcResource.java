@@ -1,6 +1,8 @@
 package org.sonatype.nexus.plugins.okta.oidc;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Objects;
 
 import javax.servlet.http.HttpServletRequest;
@@ -16,7 +18,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
-import org.apache.shiro.SecurityUtils;
 import org.sonatype.nexus.rest.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,14 +31,16 @@ public class OidcResource
 {
 	private static final Logger LOG = LoggerFactory.getLogger(OidcResource.class);
 
-	private static final String SESSION_ID_TOKEN = OidcResource.class.getName() + ".idToken";
-
 	private final OidcAuthenticationService authenticationService;
+	private final OidcLoginTicketStore loginTicketStore;
 
 	@Inject
-	public OidcResource(final OidcAuthenticationService authenticationService)
+	public OidcResource(
+			final OidcAuthenticationService authenticationService,
+			final OidcLoginTicketStore loginTicketStore)
 	{
 		this.authenticationService = Objects.requireNonNull(authenticationService);
+		this.loginTicketStore = Objects.requireNonNull(loginTicketStore);
 	}
 
 	@GET
@@ -50,7 +53,7 @@ public class OidcResource
 		}
 		catch (final OidcProtocolException | IllegalArgumentException e)
 		{
-			LOG.warn("OIDC login could not be started: {}", e.getMessage());
+			LOG.warn("OIDC login could not be started: {}", e.getMessage(), e);
 			return Response.status(Response.Status.SERVICE_UNAVAILABLE).entity("OIDC login is unavailable").build();
 		}
 	}
@@ -72,13 +75,14 @@ public class OidcResource
 		try
 		{
 			final OidcLoginResult loginResult = authenticationService.completeLogin(code, state);
-			SecurityUtils.getSubject().login(new OidcAuthenticationToken(loginResult.getIdentity(), remoteAddress(request)));
-			SecurityUtils.getSubject().getSession().setAttribute(SESSION_ID_TOKEN, loginResult.getIdToken());
-			return Response.seeOther(applicationRoot(request)).build();
+			final String ticket = loginTicketStore.issue(loginResult.getIdentity());
+			return Response.ok(sessionBootstrapPage(loginResult.getIdentity().getUsername(), ticket))
+					.type(MediaType.TEXT_HTML_TYPE)
+					.build();
 		}
 		catch (final OidcProtocolException | IllegalArgumentException e)
 		{
-			LOG.warn("OIDC callback failed: {}", e.getMessage());
+			LOG.warn("OIDC callback failed: {}", e.getMessage(), e);
 			return Response.status(Response.Status.UNAUTHORIZED).entity("OIDC login failed").build();
 		}
 	}
@@ -87,19 +91,56 @@ public class OidcResource
 	@Path("logout")
 	public Response logout(@Context final HttpServletRequest request)
 	{
-		final Object idToken = SecurityUtils.getSubject().getSession(false) == null ? null
-				: SecurityUtils.getSubject().getSession(false).getAttribute(SESSION_ID_TOKEN);
 		URI endSessionUri = null;
 		try
 		{
-			endSessionUri = authenticationService.endSession(idToken instanceof String ? (String) idToken : null);
+			endSessionUri = authenticationService.endSession(null);
 		}
 		catch (final OidcProtocolException | IllegalArgumentException e)
 		{
 			LOG.warn("OIDC logout could not create Okta end-session redirect: {}", e.getMessage());
 		}
-		SecurityUtils.getSubject().logout();
 		return Response.seeOther(endSessionUri == null ? applicationRoot(request) : endSessionUri).build();
+	}
+
+	private String sessionBootstrapPage(final String username, final String ticket)
+	{
+		final String encodedUsername = base64(username);
+		final String encodedTicket = base64(ticket);
+		return """
+				<!doctype html>
+				<html>
+				<head><meta charset="utf-8"><title>Nexus OIDC Login</title></head>
+				<body>
+				<script>
+				(function () {
+				  var body = new URLSearchParams();
+				  body.set('username', '%s');
+				  body.set('password', '%s');
+				  fetch('/service/rapture/session', {
+				    method: 'POST',
+				    credentials: 'same-origin',
+				    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+				    body: body
+				  }).then(function (response) {
+				    if (response.ok) {
+				      window.location.replace('/');
+				      return;
+				    }
+				    document.body.textContent = 'Nexus OIDC session creation failed.';
+				  }).catch(function () {
+				    document.body.textContent = 'Nexus OIDC session creation failed.';
+				  });
+				}());
+				</script>
+				</body>
+				</html>
+				""".formatted(encodedUsername, encodedTicket);
+	}
+
+	private String base64(final String value)
+	{
+		return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
 	}
 
 	private String remoteAddress(final HttpServletRequest request)

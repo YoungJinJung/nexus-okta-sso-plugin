@@ -25,10 +25,18 @@ public class OidcAuthenticationServiceTest
 		final OidcLoginStateGenerator stateGenerator = mock(OidcLoginStateGenerator.class);
 		final OidcLoginStateStore stateStore = mock(OidcLoginStateStore.class);
 		final OidcAuthorizationUrlBuilder authorizationUrlBuilder = mock(OidcAuthorizationUrlBuilder.class);
+		final OidcProviderMetadataResolver metadataResolver = mock(OidcProviderMetadataResolver.class);
+		final OIDCProviderMetadata metadata = mock(OIDCProviderMetadata.class);
 		when(stateGenerator.generate()).thenReturn(loginState);
-		when(authorizationUrlBuilder.build(loginState)).thenReturn(URI.create("https://example.okta.com/authorize"));
+		when(metadataResolver.resolve()).thenReturn(metadata);
+		when(authorizationUrlBuilder.build(metadata, loginState)).thenReturn(URI.create("https://example.okta.com/authorize"));
 
-		final URI authorizationUrl = service(stateGenerator, enabledConfig(), stateStore, authorizationUrlBuilder).beginLogin();
+		final URI authorizationUrl = service(
+				stateGenerator,
+				enabledConfig(),
+				stateStore,
+				authorizationUrlBuilder,
+				metadataResolver).beginLogin();
 
 		assertThat(authorizationUrl, equalTo(URI.create("https://example.okta.com/authorize")));
 		verify(stateStore).put(loginState);
@@ -102,14 +110,15 @@ public class OidcAuthenticationServiceTest
 			final OidcLoginStateGenerator stateGenerator,
 			final OidcConfig config,
 			final OidcLoginStateStore stateStore,
-			final OidcAuthorizationUrlBuilder authorizationUrlBuilder)
+			final OidcAuthorizationUrlBuilder authorizationUrlBuilder,
+			final OidcProviderMetadataResolver metadataResolver)
 	{
 		return new OidcAuthenticationService(
 				stateGenerator,
 				config,
 				stateStore,
 				authorizationUrlBuilder,
-				mock(OidcProviderMetadataResolver.class),
+				metadataResolver,
 				mock(OidcTokenClient.class),
 				mock(OidcIdTokenValidator.class));
 	}

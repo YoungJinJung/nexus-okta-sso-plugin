@@ -51,11 +51,13 @@ public class OidcIdTokenValidator
 		}
 		catch (final BadJOSEException e)
 		{
-			throw new OidcProtocolException("OIDC ID token validation failed", e);
+			throw new OidcProtocolException("OIDC ID token validation failed: " + e.getMessage(), e);
 		}
 		catch (final JOSEException | MalformedURLException e)
 		{
-			throw new OidcProtocolException("Unable to validate OIDC ID token", e);
+			throw new OidcProtocolException(
+					"Unable to validate OIDC ID token: " + e.getClass().getSimpleName() + ": " + e.getMessage(),
+					e);
 		}
 	}
 

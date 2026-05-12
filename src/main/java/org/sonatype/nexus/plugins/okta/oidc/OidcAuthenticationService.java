@@ -52,7 +52,7 @@ public class OidcAuthenticationService
 
 		final OidcLoginState loginState = stateGenerator.generate();
 		stateStore.put(loginState);
-		return authorizationUrlBuilder.build(loginState);
+		return authorizationUrlBuilder.build(metadataResolver.resolve(), loginState);
 	}
 
 	public OidcLoginResult completeLogin(final String code, final String state)

@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import com.nimbusds.oauth2.sdk.id.Issuer;
+import com.nimbusds.openid.connect.sdk.SubjectType;
+import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import org.junit.Test;
 
 public class OidcAuthorizationUrlBuilderTest
@@ -22,12 +25,20 @@ public class OidcAuthorizationUrlBuilderTest
 	{
 		final OidcAuthorizationUrlBuilder builder = new OidcAuthorizationUrlBuilder(new OidcConfig(properties()));
 
-		final URI uri = builder.build(new OidcLoginState("state-value", "nonce-value", Instant.parse("2026-05-11T00:00:00Z")));
+		final OIDCProviderMetadata metadata = new OIDCProviderMetadata(
+				new Issuer("https://example.okta.com"),
+				java.util.List.of(SubjectType.PUBLIC),
+				URI.create("https://example.okta.com/oauth2/v1/keys"));
+		metadata.setAuthorizationEndpointURI(URI.create("https://example.okta.com/oauth2/v1/authorize"));
+
+		final URI uri = builder.build(
+				metadata,
+				new OidcLoginState("state-value", "nonce-value", Instant.parse("2026-05-11T00:00:00Z")));
 		final Map<String, String> params = queryParams(uri);
 
 		assertThat(uri.getScheme(), equalTo("https"));
 		assertThat(uri.getHost(), equalTo("example.okta.com"));
-		assertThat(uri.getPath(), equalTo("/oauth2/default/v1/authorize"));
+		assertThat(uri.getPath(), equalTo("/oauth2/v1/authorize"));
 		assertThat(params.get("client_id"), equalTo("client-id"));
 		assertThat(params.get("response_type"), equalTo("code"));
 		assertThat(params.get("scope"), equalTo("openid profile email groups"));

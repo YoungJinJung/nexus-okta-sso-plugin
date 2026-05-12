@@ -9,11 +9,15 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
 import com.nimbusds.openid.connect.sdk.claims.IDTokenClaimsSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Singleton
 @Named
 public class OidcIdentityExtractor
 {
+	private static final Logger log = LoggerFactory.getLogger(OidcIdentityExtractor.class);
+
 	private final OidcConfig config;
 	private final OidcRoleMapper roleMapper;
 
@@ -38,6 +42,12 @@ public class OidcIdentityExtractor
 		final Set<String> roles = roleMapper.mapGroupsToRoles(groups == null ? List.of() : groups);
 		if (roles.isEmpty())
 		{
+			log.warn(
+					"OIDC user '{}' has no mapped Nexus role. groups claim '{}': {}, configured Okta groups: {}",
+					username,
+					config.getGroupsClaim(),
+					groups == null ? List.of() : groups,
+					config.getGroupRoleMapping().keySet());
 			throw new OidcProtocolException("OIDC user has no mapped Nexus role");
 		}
 		if (username == null || username.isBlank())

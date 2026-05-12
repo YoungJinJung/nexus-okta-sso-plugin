@@ -41,6 +41,10 @@ public class OidcProviderMetadataResolver
 			{
 				throw new OidcProtocolException("OIDC discovery metadata does not define token endpoint");
 			}
+			if (metadata.getAuthorizationEndpointURI() == null)
+			{
+				throw new OidcProtocolException("OIDC discovery metadata does not define authorization endpoint");
+			}
 			if (metadata.getJWKSetURI() == null)
 			{
 				throw new OidcProtocolException("OIDC discovery metadata does not define JWKS URI");

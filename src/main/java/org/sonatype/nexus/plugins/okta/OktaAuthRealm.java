@@ -32,6 +32,8 @@ import org.sonatype.nexus.plugins.okta.client.OktaAuthClientExceptionSeverity;
 import org.sonatype.nexus.plugins.okta.client.dto.OktaAuthResponse;
 import org.sonatype.nexus.plugins.okta.oidc.OidcAuthenticatedIdentity;
 import org.sonatype.nexus.plugins.okta.oidc.OidcAuthenticationToken;
+import org.sonatype.nexus.plugins.okta.oidc.OidcLoginTicketStore;
+import org.sonatype.nexus.plugins.okta.oidc.OidcNexusUserProvisioner;
 import org.sonatype.nexus.security.role.RoleIdentifier;
 import org.sonatype.nexus.security.user.UserManager;
 import org.sonatype.nexus.security.user.UserNotFoundException;
@@ -47,13 +49,21 @@ public class OktaAuthRealm extends AuthorizingRealm
 
 	private final OktaAuthClient client;
 	private final UserManager userManager;
+	private final OidcLoginTicketStore oidcLoginTicketStore;
+	private final OidcNexusUserProvisioner oidcNexusUserProvisioner;
 	private final Map<String, Set<String>> oktaMappedRolesByUser = new ConcurrentHashMap<>();
 
 	@Inject
-	public OktaAuthRealm(final OktaAuthClient client, final UserManager userManager)
+	public OktaAuthRealm(
+			final OktaAuthClient client,
+			final UserManager userManager,
+			final OidcLoginTicketStore oidcLoginTicketStore,
+			final OidcNexusUserProvisioner oidcNexusUserProvisioner)
 	{
 		this.client = Objects.requireNonNull(client);
 		this.userManager = Objects.requireNonNull(userManager);
+		this.oidcLoginTicketStore = Objects.requireNonNull(oidcLoginTicketStore);
+		this.oidcNexusUserProvisioner = Objects.requireNonNull(oidcNexusUserProvisioner);
 
 		LOG.info("Okta Auth Realm for {} initialized...", this.client.getConfig().getOktaOrgUrl());
 	}
@@ -70,7 +80,7 @@ public class OktaAuthRealm extends AuthorizingRealm
 		if (token instanceof OidcAuthenticationToken)
 		{
 			final OidcAuthenticatedIdentity identity = ((OidcAuthenticationToken) token).getIdentity();
-			oktaMappedRolesByUser.put(identity.getUsername(), new HashSet<>(identity.getRoles()));
+			authenticateOidcIdentity(identity);
 			LOG.info("Authenticated OIDC user {}", identity.getUsername());
 			return new SimpleAuthenticationInfo(identity.getUsername(), token.getCredentials(), getName());
 		}
@@ -83,6 +93,15 @@ public class OktaAuthRealm extends AuthorizingRealm
 
 		final UsernamePasswordToken t = (UsernamePasswordToken) token;
 		final String password = new String(t.getPassword());
+
+		final var oidcIdentity = oidcLoginTicketStore.consume(t.getUsername(), password);
+		if (oidcIdentity.isPresent())
+		{
+			final OidcAuthenticatedIdentity identity = oidcIdentity.get();
+			authenticateOidcIdentity(identity);
+			LOG.info("Authenticated OIDC session ticket for user {}", identity.getUsername());
+			return new SimpleAuthenticationInfo(identity.getUsername(), token.getCredentials(), getName());
+		}
 
 		LOG.info("Authenticating with Okta for user {}", t.getUsername());
 
@@ -113,6 +132,12 @@ public class OktaAuthRealm extends AuthorizingRealm
 		}
 
 		return null;
+	}
+
+	private void authenticateOidcIdentity(final OidcAuthenticatedIdentity identity)
+	{
+		oktaMappedRolesByUser.put(identity.getUsername(), new HashSet<>(identity.getRoles()));
+		oidcNexusUserProvisioner.provision(identity);
 	}
 
 	@Override
