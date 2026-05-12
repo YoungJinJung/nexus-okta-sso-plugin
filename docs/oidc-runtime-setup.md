@@ -33,6 +33,36 @@ docker run \
 
 Use your runtime secret manager for `OIDC_CLIENT_SECRET`. Do not bake it into the image.
 
+## Docker Compose
+
+Copy the example env file and fill in Okta values:
+
+```bash
+cp .env.example .env.local
+```
+
+Start Nexus:
+
+```bash
+docker compose up -d
+```
+
+On Apple Silicon the compose defaults use:
+
+```text
+NEXUS_OKTA_IMAGE_TAG=local-arm64
+NEXUS_PLATFORM=linux/arm64
+```
+
+For an x86 image, set these in `.env.local`:
+
+```text
+NEXUS_OKTA_IMAGE_TAG=local-amd64
+NEXUS_PLATFORM=linux/amd64
+```
+
+The compose file persists Nexus data in the `nexus-okta-data` volume.
+
 ## Login URL
 
 Start login at:

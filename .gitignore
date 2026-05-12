@@ -23,6 +23,11 @@ RemoteSystemsTempFiles/
 # VS CODE GENERATED FILES
 .factorypath
 
+# LOCAL ENV FILES
+.env
+.env.local
+.env.*.local
+
 # MERGED FILES #
 *.BASE
 *.LOCAL
