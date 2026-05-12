@@ -1,111 +1,278 @@
 # Nexus Okta Auth Plugin
-This plugin enables authentication with Okta for Sonatype Nexus OSS. It provides a AuthenticatingRealm that uses the Okta API to authenticate users. MFA can be used, but only the `push` factor is supported at the moment. This plugin only provides very basic functionality (read the next section carefully).
 
-## Please note: No support for Okta groups
+Okta authentication plugin for Sonatype Nexus Repository OSS.
 
-Authorization based on Okta groups is currently *not* implemented. This means you can't map Okta groups to Nexus roles. You still have to create users in Nexus and assign them the desired roles. This isn't ideal, but if your primary use case is authentication via Okta, then this may be sufficient for you. Basically you still manage users and roles in Nexus, but users can authenticate via Okta (including push MFA).
+This fork targets Nexus Repository `3.92.0` and supports Okta OIDC Authorization Code login with group-to-role RBAC. The older Okta Authn API username/password flow is still present for compatibility, but new deployments should prefer OIDC so Nexus never handles the user's Okta password directly.
 
-Some background: Unfortunately it doesn't seem to be possible to query Okta for the groups of the current user without an API key. (The session token does not seem to work.) Due to security restrictions and the lack of fine grained access control within Okta, we're unable to use API keys at the moment. That's why we're currently using this workaround.
+## Features
 
-However, if you're interested in contributing, I'd be happy to review and merge a pull request.
+- Nexus `3.92.0` Docker image support.
+- Okta OIDC Authorization Code login.
+- Direct login endpoint:
 
-# Installation
-
-## Dockerfile
-
-If you are using Docker to deploy NXRM, the following is an example `Dockerfile`. It installs and configures the plugin. Make sure to replace `https://your-account.okta.com` with your Okta organization link.
-
-```
-FROM sonatype/nexus3
-
-USER root
-
-# install plugins
-RUN yum update -y && \
-    yum install -y curl && \
-    curl -L \
-    https://github.com/restfulhead/nexus-okta-auth-plugin/releases/download/0.0.4/nexus-okta-auth-plugin-0.0.4.jar --output /opt/sonatype/nexus/system/nexus-okta-auth-plugin.jar && \
-    echo "reference\:file\:nexus-okta-auth-plugin.jar = 200" >> /opt/sonatype/nexus/etc/karaf/startup.properties && \
-    touch /opt/sonatype/nexus/etc/nexus-okta-auth.properties && \
-    echo "okta.org.url=https://your-account.okta.com" >> /opt/sonatype/nexus/etc/nexus-okta-auth.properties && \
-    chown nexus:nexus -R /opt/sonatype/nexus && \
-    yum clean all && \
-    rm -rf /var/cache/yum
-
-USER nexus
+```text
+/service/rest/okta/oidc/login
 ```
 
-## Manual installation
+- OIDC callback endpoint:
 
-If you're not using Docker, then you can follow the following manual steps to install the plugin. It is assumed you installed Nexus under `/opt/sonatype/nexus`. If your installation directory is different, modify the instructions accordingly.
-
-* [Download the latest Plugin release from Github](https://github.com/restfulhead/nexus-okta-auth-plugin/releases/download/nexus-okta-auth-plugin-0.0.4/nexus-okta-auth-plugin-0.0.4.jar).
-* Copy the file to `/opt/sonatype/nexus/system/` and rename it to `nexus-okta-auth-plugin.jar`.
-* Append the following line to *startup.properties* file (under `/opt/sonatype/nexus/etc/karaf`):
-```
-reference\:file\:nexus-okta-auth-plugin.jar = 200
-```
-* Create a new file `nexus-okta-auth.properties` under `/opt/sonatype/nexus/etc/` with the following content. Adjust the URL to match your Okta org url:
-```
-okta.org.url=https://your-account.okta.com
+```text
+/service/rest/okta/oidc/callback
 ```
 
-# Usage
+- OIDC-aware logout endpoint:
 
-## Activating the plugin
-After you've installed the plugin, you need to activate it.
+```text
+/service/rest/okta/oidc/logout
+```
 
-* Login to Nexus with a user that has administration rights.
-* In the Nexus administration, navigate to `Security/Realms`
-* If the installation was successful, you should see the "Okta Auth Realm" in the list of available realms. Move it to the list of active realms and save.
+- Okta `groups` claim mapping to Nexus role IDs.
+- Local Nexus user auto-provisioning for OIDC users.
 
-Now Okta users can sign in to Nexus. However, without additional configuration they won't be able to do much, because they're not authorized.
+## OIDC Login Flow
 
-## User management
-In order to assign roles to a user, you need to create the user also in Nexus:
+1. The user opens the Nexus OIDC login URL.
+2. Nexus creates a server-side `state` and `nonce`.
+3. Nexus redirects the browser to Okta.
+4. Okta authenticates the user and redirects back to the Nexus callback with an authorization code.
+5. Nexus exchanges the code for tokens, validates the ID token, reads the username and groups claims, maps groups to Nexus roles, and creates or updates the local Nexus user.
+6. Nexus creates the UI web session and redirects the user to `/`.
 
-* In the Nexus administration, navigate to `Security/Users`
-* Select `Local` as the source and then click `Create local user`.
-* Make sure the `username` is the same as the Okta user name (usually the email address). Fill out all required fields. For the password, you can use a long, hard to guess random value. Users will be authenticating using Okta, so this password is effectively meaningless and you don't have to remember it. However, unless you deactivate the Local Authentication Realm, authentication might still fall-back to it. Therefore make sure the password is not easy to guess.
-* Assign the desired role to the user
+More detail is in [docs/oidc-login-flow.md](docs/oidc-login-flow.md).
 
-Now when users log in (by using Okta credentials), they will have roles assigned based on you local configuration.
+## Okta Application Setup
 
-## Disabling the local authentication realm
+Create an Okta OIDC web application.
 
-If you only want users to be able to login via Okta, then you can deactivate the Local *Authentication* Realm. This means you will be no longer to use the default `admin` user. Make sure you have at least one Okta user who you assigned the `nx-admin` role, so you don't log yourself out. Also make sure to keep the Local *Authorizing* Realm activated. Here's what this configuration could look like:
+Use Authorization Code flow and configure:
 
-<img style="border: 1px solid grey;" src='docs/img/nexus-realms-example.png'>
+```text
+Sign-in redirect URI:
+https://<nexus-host>/service/rest/okta/oidc/callback
 
+Initiate login URI:
+https://<nexus-host>/service/rest/okta/oidc/login
 
-# Development
+Sign-out redirect URI:
+https://<nexus-host>/
+```
 
-## Build and test
+To launch Nexus from the Okta dashboard, make the app visible to users and assign the app to the required users or groups. If the tile does not appear in the Okta dashboard, check Okta app assignment and app visibility settings first.
 
-To run the unit tests, simply run `mvn clean test`.
+Configure a `groups` claim in the ID token. Prefer a filtered claim that only emits Nexus-related groups.
 
-There's also an integration test, which will make https requests against Okta. For this to work, you need to supply a valid Okta organization link, user and password. You can use the following system properties for this: `oktaTestOrgUrl`, `oktaTestUserName` and `oktaTestUserPassword`.
+For Okta org authorization server setups, the issuer usually looks like:
 
-For example: `mvn verify -Pintegration-test -DoktaTestOrgUrl=https://your-account.okta.com -DoktaTestUserName=your-email -DoktaTestUserPassword=your-password`
+```text
+https://your-org.okta.com
+```
 
+For a custom authorization server, it usually looks like:
 
-## Test in a Docker Nexus test instance
+```text
+https://your-org.okta.com/oauth2/default
+```
 
-To test locally, you can make use of the provided `Dockerfile`, which will install the plugin from you local `target` directory.
+Use the issuer that matches the Okta application and token configuration you actually use.
 
-* To build the container image: `docker build -t nxrm-dev --build-arg OKTA_ORG_URL=https://your-org.okta.com .` (Replace `your-org` with your Okta organization accordingly)
-* Then run `docker run -it -p 8081:8081 nxrm-dev`
+## Nexus Runtime Configuration
 
-You should now be able to access Nexus from your browser at http://localhost:8081. The default admin user is `admin` with password `admin123`. Follow the instructions from above in order to use the plugin.
+The Docker image writes `/opt/sonatype/nexus/etc/nexus-okta-auth.properties` at container start from environment variables.
 
-# Release
+Required OIDC variables:
 
-To release, run (replace `$BUILD_NUMBER` with the release no).:
-* `mvn clean package bundle:bundle -Drevision=$BUILD_NUMBER`
-* `mvn deploy scm:tag -Drevision=$BUILD_NUMBER -DskipNexusStagingDeployMojo=true`
+```text
+OIDC_ENABLED=true
+OIDC_ISSUER=https://your-org.okta.com
+OIDC_CLIENT_ID=<client-id>
+OIDC_CLIENT_SECRET=<client-secret>
+OIDC_REDIRECT_URI=https://<nexus-host>/service/rest/okta/oidc/callback
+OIDC_POST_LOGOUT_REDIRECT_URI=https://<nexus-host>/
+OIDC_GROUP_ROLE_MAPPING=Developers=nx-developer,Okta Admins=nx-admin
+```
 
-# Contributions
+Optional variables:
 
-Some parts of this project were inspired by the [Nexus3 Crowd Plugin](https://github.com/pingunaut/nexus3-crowd-plugin) which is released under the Apache License 2.0 by [pingunaut](https://github.com/pingunaut)
+```text
+OIDC_SCOPES=openid,profile,email,groups
+OIDC_USERNAME_CLAIM=preferred_username
+OIDC_GROUPS_CLAIM=groups
+```
 
-This is a plugin for Sonatype Nexus (TM) Open Source Version, Copyright (c) 2008-present Sonatype, Inc.
+Do not bake `OIDC_CLIENT_SECRET` into an image. Inject it through Docker env files, ECS secrets, Kubernetes secrets, or your runtime secret manager.
+
+## Nexus Realm Activation
+
+After the plugin is installed, enable the realm in Nexus:
+
+1. Log in to Nexus as an administrator.
+2. Open `Administration > Security > Realms`.
+3. Move `Okta Auth Realm` to the active realms list.
+4. Keep the standard Nexus realms active unless you intentionally want to remove local login:
+
+```text
+NexusAuthenticatingRealm
+NexusAuthorizingRealm
+Okta Auth Realm
+```
+
+This step is required. The OIDC callback endpoint can exist even when the realm is inactive, but Nexus cannot create the final UI session unless `Okta Auth Realm` is active.
+
+## RBAC
+
+Map Okta group names to Nexus role IDs:
+
+```text
+OIDC_GROUP_ROLE_MAPPING=Developers=nx-developer,Okta Admins=nx-admin
+```
+
+Users without at least one mapped role are denied. The plugin also provisions a local Nexus user with the mapped roles so Nexus screens such as `My Account` work after OIDC login.
+
+## Docker Build
+
+Build the plugin jar:
+
+```bash
+mvn clean package
+```
+
+Build an Apple Silicon image:
+
+```bash
+docker build --platform linux/arm64 -t nexus-okta-auth-plugin:local-arm64 .
+```
+
+Build an x86_64 Linux image:
+
+```bash
+docker build --platform linux/amd64 -t nexus-okta-auth-plugin:local-amd64 .
+```
+
+For ECR-style tagging:
+
+```bash
+docker build --platform linux/amd64 \
+  -t 768499315087.dkr.ecr.ap-northeast-2.amazonaws.com/nexus:3.92.0-oidc-<git-sha> .
+```
+
+## Docker Compose
+
+Copy the example env file and fill in Okta values:
+
+```bash
+cp .env.example .env.local
+```
+
+Start Nexus:
+
+```bash
+docker compose up -d
+```
+
+The compose file exposes Nexus at:
+
+```text
+http://localhost:18081
+```
+
+Use the local OIDC login URL:
+
+```text
+http://localhost:18081/service/rest/okta/oidc/login
+```
+
+On Apple Silicon, the compose defaults use:
+
+```text
+NEXUS_OKTA_IMAGE_TAG=local-arm64
+NEXUS_PLATFORM=linux/arm64
+```
+
+For an x86 image, set these in `.env.local`:
+
+```text
+NEXUS_OKTA_IMAGE_TAG=local-amd64
+NEXUS_PLATFORM=linux/amd64
+```
+
+The compose file persists Nexus data in the `nexus-okta-data` volume. Nexus stores its own data under `/nexus-data`; no extra database is required for local compose testing.
+
+## Manual Installation
+
+For non-Docker installs, build the jar and copy it into the Nexus installation.
+
+```bash
+mvn clean package
+cp target/nexus-okta-auth-plugin-0-SNAPSHOT.jar /opt/sonatype/nexus/system/nexus-okta-auth-plugin.jar
+```
+
+Nexus `3.92.0` is Spring Boot based, so the Docker image patches the Nexus boot jar classpath rather than using the older Karaf `startup.properties` plugin loading model. Prefer the provided Dockerfile for repeatable deployments.
+
+Create `/opt/sonatype/nexus/etc/nexus-okta-auth.properties` with the equivalent properties if you run outside the provided container:
+
+```properties
+oidc.enabled=true
+oidc.issuer=https://your-org.okta.com
+oidc.client.id=<client-id>
+oidc.client.secret=<client-secret>
+oidc.redirect.uri=https://<nexus-host>/service/rest/okta/oidc/callback
+oidc.post.logout.redirect.uri=https://<nexus-host>/
+oidc.scopes=openid,profile,email,groups
+oidc.username.claim=preferred_username
+oidc.groups.claim=groups
+oidc.group.role.mapping=Developers=nx-developer,Okta Admins=nx-admin
+```
+
+## Troubleshooting
+
+### Login returns `OIDC login is unavailable`
+
+Check that OIDC is enabled and all required OIDC values are present. Also verify that the issuer exposes OIDC discovery metadata.
+
+### Callback returns `OIDC login failed`
+
+Check Nexus logs for the detailed reason. Common causes are an invalid client secret, mismatched redirect URI, invalid issuer, missing username claim, missing groups claim, or no mapped Nexus role.
+
+### Page shows `Nexus OIDC session creation failed`
+
+Okta authentication and callback already succeeded, but Nexus could not create the UI session. First check `Administration > Security > Realms` and confirm `Okta Auth Realm` is active.
+
+If Nexus runs with more than one task or pod, also ensure the callback and the following `/service/rapture/session` request reach the same instance, or replace the in-memory login ticket store with a shared store.
+
+### Okta dashboard tile does not appear
+
+Check that the Okta OIDC app is assigned to the user or one of the user's groups, and that the app is not hidden from end users. The app's initiate login URI should point to:
+
+```text
+https://<nexus-host>/service/rest/okta/oidc/login
+```
+
+## Development
+
+Run unit tests:
+
+```bash
+mvn clean test
+```
+
+Run integration tests against Okta only when you have a test tenant and credentials:
+
+```bash
+mvn verify -Pintegration-test \
+  -DoktaTestOrgUrl=https://your-org.okta.com \
+  -DoktaTestUserName=your-email \
+  -DoktaTestUserPassword=your-password
+```
+
+## Documentation
+
+- [Nexus 3.92 upgrade plan](docs/upgrade-plan-nexus-3.92.md)
+- [OIDC login flow](docs/oidc-login-flow.md)
+- [OIDC runtime setup](docs/oidc-runtime-setup.md)
+- [OIDC development plan](docs/oidc-development-plan.md)
+
+## Contributions
+
+Some parts of this project were inspired by the [Nexus3 Crowd Plugin](https://github.com/pingunaut/nexus3-crowd-plugin), released under the Apache License 2.0 by [pingunaut](https://github.com/pingunaut).
+
+This is a plugin for Sonatype Nexus Open Source Version, Copyright (c) 2008-present Sonatype, Inc.
